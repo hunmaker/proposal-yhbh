@@ -82,7 +82,7 @@ function App() {
             whileHover={{ y: -8, scale: 1.015 }}
             whileTap={{ scale: 0.985 }}
           >
-            <img src={beginningImage} alt="우리의 시작을 담은 사진" />
+            <img src={beginningImage} alt="우리의 시작을 담은 사진" decoding="async" fetchPriority="high" />
           </motion.button>
         </motion.div>
       </section>
@@ -137,7 +137,7 @@ function App() {
                   whileHover={{ y: -7 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <img src={src} alt={`${memory.alt} ${imageIndex + 1}`} loading="lazy" />
+                  <img src={src} alt={`${memory.alt} ${imageIndex + 1}`} loading="lazy" decoding="async" />
                   <span>0{imageIndex + 1}</span>
                 </motion.button>
               ))}
