@@ -7,14 +7,14 @@ type Track = {
 };
 
 const tracks: Track[] = [
-  { name: 'BGM 01 · 따뜻한 피아노', src: '/music/proposal-bgm.mp3' },
-  { name: 'BGM 02 · 감동적인 피아노', src: '/music/emotional-piano-demo.mp3' },
+  { name: 'BGM 01 · All I Need', src: '/music/All_I_Need.mp3' },
+  { name: 'BGM 02 · I ll Be There', src: '/music/I_ll_Be_There.mp3' },
 ];
 
 export default function MusicButton() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [trackIndex, setTrackIndex] = useState(1);
+  const [trackIndex, setTrackIndex] = useState(0);
 
   useEffect(() => {
     const audio = new Audio(tracks[trackIndex].src);
