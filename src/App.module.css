@@ -362,10 +362,10 @@ h2 em,
 .sectionHead .futureIntro {
   max-width: 900px;
   margin: 52px 0 0;
-  color: #3f3934;
-  font-size: clamp(30px, 2.8vw, 38px);
-  font-weight: 500;
-  line-height: 1.7;
+  color: #6f675f;
+  font-family: 'Gowun Batang', serif;
+  font-size: clamp(25px, 3vw, 38px);
+  line-height: 1.8;
   letter-spacing: -0.045em;
 }
 .future {
