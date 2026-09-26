@@ -75,24 +75,34 @@ function App() {
     const getMaxScroll = () => Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
 
     type Bounds = { top: number; bottom: number; end: number };
-    const boundsCache = new Map<HTMLElement, Bounds>();
+    // top/bottom(문서 기준 좌표)만 캐시하고, end(뷰포트 기준 목표 스크롤 값)는
+    // 매번 그 시점의 window.innerHeight로 다시 계산한다.
+    // 모바일에서는 스크롤 도중 주소창이 접히면서 innerHeight가 실시간으로 바뀌는데,
+    // end 값을 미리 캐시해두면 그 순간의 (이미 낡은) innerHeight 기준 목표 지점을
+    // 계속 쫓아가게 되어 실제 섹션 끝보다 더 밑으로 내려간 뒤에야 다음 섹션으로
+    // 넘어가는 원인이 된다.
+    const boundsCache = new Map<HTMLElement, { top: number; bottom: number }>();
+
+    const computeEnd = (top: number, bottom: number) =>
+      Math.max(top, Math.min(bottom - window.innerHeight, getMaxScroll()));
 
     const measureSections = () => {
-      const maxScroll = getMaxScroll();
       getSections().forEach((section) => {
         const rect = section.getBoundingClientRect();
         const top = rect.top + window.scrollY;
         const bottom = rect.bottom + window.scrollY;
-        const end = Math.max(top, Math.min(bottom - window.innerHeight, maxScroll));
-        boundsCache.set(section, { top, bottom, end });
+        boundsCache.set(section, { top, bottom });
       });
     };
 
-    const getBounds = (section: HTMLElement) => {
-      const cached = boundsCache.get(section);
-      if (cached) return cached;
-      measureSections();
-      return boundsCache.get(section) ?? { top: 0, bottom: 0, end: 0 };
+    const getBounds = (section: HTMLElement): Bounds => {
+      let cached = boundsCache.get(section);
+      if (!cached) {
+        measureSections();
+        cached = boundsCache.get(section);
+      }
+      const { top = 0, bottom = 0 } = cached ?? {};
+      return { top, bottom, end: computeEnd(top, bottom) };
     };
 
     // 이미지 로딩으로 레이아웃 높이가 변할 때만 다시 측정한다.
@@ -248,20 +258,13 @@ function App() {
       state.animationFrame = window.requestAnimationFrame(frame);
     };
 
-    // 사용자 입력이 들어오면 자동 스크롤의 RAF/대기 타이머를 즉시 끊는다.
-    // passive wheel 이벤트이므로 브라우저의 실제 수동 스크롤은 막지 않는다.
-    const stopForUserInteraction = () => {
-      if (!autoScroll) return;
+    // 실제 scroll 이벤트가 없을 때(예: 탭만 하고 움직이지 않은 경우)를 대비한 안전장치 지연 시간.
+    const RESUME_FALLBACK_DELAY = 900;
+    // 모멘텀(관성) 스크롤이 실제로 멈춘 뒤 재개까지 대기하는 시간.
+    const RESUME_SETTLE_DELAY = 250;
 
-      state.userInteracting = true;
-      window.cancelAnimationFrame(state.animationFrame);
-      window.clearTimeout(state.timer);
+    const scheduleResume = (delay: number) => {
       window.clearTimeout(state.resumeTimer);
-      state.animationFrame = 0;
-      state.timer = 0;
-      state.phase = 'idle';
-
-      // 사용자가 계속 움직이는 동안에는 이 타이머를 계속 뒤로 미룬다.
       state.resumeTimer = window.setTimeout(() => {
         if (!autoScroll) return;
 
@@ -269,7 +272,34 @@ function App() {
         state.resumeTimer = 0;
         state.sectionIndex = getCurrentSectionIndex();
         startSectionScroll();
-      }, 900);
+      }, delay);
+    };
+
+    // 사용자 입력이 들어오면 자동 스크롤의 RAF/대기 타이머를 즉시 끊는다.
+    // passive wheel/touch 이벤트이므로 브라우저의 실제 수동 스크롤은 막지 않는다.
+    const stopForUserInteraction = () => {
+      if (!autoScroll) return;
+
+      state.userInteracting = true;
+      window.cancelAnimationFrame(state.animationFrame);
+      window.clearTimeout(state.timer);
+      state.animationFrame = 0;
+      state.timer = 0;
+      state.phase = 'idle';
+
+      // 실제 스크롤 없이 탭/키 입력만 있었던 경우를 위한 폴백.
+      // 스크롤이 실제로 발생하면 아래 handleScrollSettle이 더 짧은 지연으로 대체한다.
+      scheduleResume(RESUME_FALLBACK_DELAY);
+    };
+
+    // iOS/안드로이드는 손을 뗀 뒤에도 관성으로 한동안 스크롤이 이어지는데,
+    // 이 시점에 자동 스크롤이 scrollTo를 다시 호출하면 관성 스크롤과 충돌해
+    // 섹션 경계보다 더 밑으로 내려간 뒤에야 다음 섹션으로 넘어가는 문제가 생긴다.
+    // 그래서 마지막 scroll 이벤트로부터 일정 시간 스크롤이 없을 때(=관성이 실제로
+    // 멈췄을 때)만 재개하도록 한다.
+    const handleScrollSettle = () => {
+      if (!state.userInteracting) return;
+      scheduleResume(RESUME_SETTLE_DELAY);
     };
 
     // 자동 재생 시작 전에 페이지의 이미지를 가능한 한 미리 디코드한다.
@@ -294,12 +324,14 @@ function App() {
     window.addEventListener('touchstart', stopForUserInteraction, { passive: true });
     window.addEventListener('touchmove', stopForUserInteraction, { passive: true });
     window.addEventListener('keydown', stopForUserInteraction);
+    window.addEventListener('scroll', handleScrollSettle, { passive: true });
 
     return () => {
       window.removeEventListener('wheel', stopForUserInteraction);
       window.removeEventListener('touchstart', stopForUserInteraction);
       window.removeEventListener('touchmove', stopForUserInteraction);
       window.removeEventListener('keydown', stopForUserInteraction);
+      window.removeEventListener('scroll', handleScrollSettle);
       resizeObserver.disconnect();
       boundsCache.clear();
       html.style.scrollBehavior = previousScrollBehavior;
