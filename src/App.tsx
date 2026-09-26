@@ -616,21 +616,75 @@ function App() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 1 }}
             >
+              <div className={styles.heartBurst} aria-hidden="true">
+                {[
+                  { x: -210, y: -115, r: -18, d: 0.05, s: 0.72 },
+                  { x: -150, y: -175, r: 12, d: 0.12, s: 0.52 },
+                  { x: -75, y: -215, r: -8, d: 0.18, s: 0.62 },
+                  { x: 85, y: -215, r: 10, d: 0.16, s: 0.58 },
+                  { x: 160, y: -165, r: -14, d: 0.1, s: 0.5 },
+                  { x: 220, y: -100, r: 18, d: 0.06, s: 0.7 },
+                  { x: -235, y: 35, r: -25, d: 0.2, s: 0.48 },
+                  { x: 235, y: 35, r: 22, d: 0.22, s: 0.55 },
+                  { x: -170, y: 125, r: 14, d: 0.25, s: 0.62 },
+                  { x: 175, y: 125, r: -12, d: 0.28, s: 0.52 },
+                ].map((heart, index) => (
+                  <motion.span
+                    key={index}
+                    className={styles.burstHeart}
+                    initial={{ opacity: 0, x: 0, y: 0, scale: 0, rotate: 0 }}
+                    animate={{
+                      opacity: [0, 1, 0],
+                      x: heart.x,
+                      y: heart.y,
+                      scale: [0, heart.s, heart.s * 0.75],
+                      rotate: [0, heart.r, heart.r * 1.5],
+                    }}
+                    transition={{ duration: 1.7, delay: heart.d, ease: 'easeOut' }}
+                  >
+                    ♥
+                  </motion.span>
+                ))}
+              </div>
+
+              <motion.div
+                className={styles.heartHalo}
+                initial={{ opacity: 0, scale: 0.35 }}
+                animate={{ opacity: [0, 0.7, 0], scale: [0.35, 1.7, 2.1] }}
+                transition={{ duration: 1.6, ease: 'easeOut' }}
+              />
+
               <motion.div
                 className={styles.heart}
                 initial={{ scale: 0, rotate: -15 }}
-                animate={{ scale: [0, 1.18, 1], rotate: [ -15, 8, 0 ] }}
-                transition={{ duration: 0.8 }}
+                animate={{ scale: [0, 1.2, 0.96, 1], rotate: [-15, 8, -3, 0] }}
+                transition={{ duration: 0.95, ease: 'easeOut' }}
               >
                 ♥
               </motion.div>
-              <h2>고마워.</h2>
-              <p>
-                그럼 우리 이야기는
+              <motion.h2
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.35 }}
+              >
+                고마워.
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.55 }}
+              >
+                앞으로의 모든 순간,
                 <br />
-                이제부터가 진짜 시작이네.
-              </p>
-              <span>WITH LOVE, FOREVER</span>
+                함께 만들어가자.
+              </motion.p>
+              <motion.span
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.55 }}
+                transition={{ duration: 1, delay: 0.9 }}
+              >
+                WITH LOVE, FOREVER
+              </motion.span>
             </motion.div>
           )}
         </AnimatePresence>
