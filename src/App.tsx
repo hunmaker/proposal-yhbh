@@ -116,15 +116,17 @@ function App() {
       const sections = getSections();
       if (!sections.length) return 0;
 
-      const y = window.scrollY;
+      // 뷰포트 맨 위(scrollY) 대신 화면 "정중앙"을 기준으로 현재 섹션을 판단한다.
+      // 마지막 섹션처럼 뷰포트 높이와 딱 맞는 섹션은, 위쪽 섹션들의 레이아웃이
+      // 이미지/폰트 로딩 등으로 몇 픽셀만 밀려도 top 기준 판정이 한 칸 어긋나서
+      // 오토스크롤이 엉뚱한(위쪽) 섹션으로 점프했다가 다시 내려오는 문제가 있었다.
+      // 중앙 기준으로 바꾸면 섹션 높이의 절반만큼 여유가 생겨 훨씬 안정적이다.
+      const viewportCenter = window.scrollY + window.innerHeight / 2;
       let index = 0;
 
-      // 현재 스크롤 위치보다 위에 있는 가장 마지막 섹터를 찾는다.
-      // 화면 중앙을 기준으로 찾지 않기 때문에 섹터 높이가 제각각이어도
-      // 중간에서 위로 올렸을 때 해당 섹터가 정확히 선택된다.
       for (let i = 0; i < sections.length; i += 1) {
         const { top } = getBounds(sections[i]);
-        if (top <= y + 2) index = i;
+        if (top <= viewportCenter) index = i;
         else break;
       }
 
