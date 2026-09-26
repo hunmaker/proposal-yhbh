@@ -1,3 +1,27 @@
+
+.autoScrollButton {
+  position: fixed;
+  z-index: 110;
+  top: 74px;
+  right: 20px;
+  padding: 10px 14px;
+  border: 1px solid rgba(36, 32, 28, 0.18);
+  border-radius: 999px;
+  background: rgba(244, 240, 233, 0.78);
+  color: #24201c;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: 0.25s ease;
+}
+
+.autoScrollButtonOn {
+  background: rgba(17, 16, 15, 0.86);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f8f5ef;
+}
+
 .page {
   overflow: hidden;
   background: #f4f0e9;
@@ -703,6 +727,12 @@ h2 em,
 }
 
 @media (max-width: 500px) {
+  .autoScrollButton {
+    top: 60px;
+    right: 12px;
+    padding: 9px 11px;
+    font-size: 8px;
+  }
   .hero h1 {
     font-size: 62px;
   }
@@ -737,4 +767,8 @@ h2 em,
   * {
     scroll-behavior: auto !important;
   }
+}
+
+@media (max-width: 640px) {
+  .autoScrollButton { top: 64px; right: 12px; }
 }

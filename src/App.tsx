@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import MusicButton from './components/MusicButton';
 import { beginningImage, futureCards, memories } from './data/story';
 import styles from './App.module.css';
@@ -31,12 +31,295 @@ const imageVariants = {
 function App() {
   const [answered, setAnswered] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [autoScroll, setAutoScroll] = useState(false);
+  const sectionRefs = useRef<HTMLElement[]>([]);
+  const autoScrollState = useRef({
+    sectionIndex: 0,
+    phase: 'idle' as 'idle' | 'waiting' | 'scrolling',
+    timer: 0 as number | 0,
+    animationFrame: 0 as number | 0,
+    resumeTimer: 0 as number | 0,
+    lastScrollY: 0,
+    userInteracting: false,
+  });
+
+  const registerSection = (element: HTMLElement | null) => {
+    if (!element) return;
+    if (!sectionRefs.current.includes(element)) sectionRefs.current.push(element);
+  };
+
+  useEffect(() => {
+    const state = autoScrollState.current;
+
+    const clearAutoScroll = () => {
+      window.clearTimeout(state.timer);
+      window.clearTimeout(state.resumeTimer);
+      window.cancelAnimationFrame(state.animationFrame);
+      state.timer = 0;
+      state.resumeTimer = 0;
+      state.phase = 'idle';
+    };
+
+    if (!autoScroll || sectionRefs.current.length === 0) {
+      clearAutoScroll();
+      return;
+    }
+
+    // 이 컴포넌트가 직접 프레임별 위치를 제어할 때 전역 smooth scrolling과
+    // 충돌하지 않도록 자동 스크롤 세션 동안만 native auto로 고정한다.
+    const html = document.documentElement;
+    const previousScrollBehavior = html.style.scrollBehavior;
+    html.style.scrollBehavior = 'auto';
+
+    const getSections = () => sectionRefs.current.filter(Boolean);
+    const getMaxScroll = () => Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+
+    type Bounds = { top: number; bottom: number; end: number };
+    const boundsCache = new Map<HTMLElement, Bounds>();
+
+    const measureSections = () => {
+      const maxScroll = getMaxScroll();
+      getSections().forEach((section) => {
+        const rect = section.getBoundingClientRect();
+        const top = rect.top + window.scrollY;
+        const bottom = rect.bottom + window.scrollY;
+        const end = Math.max(top, Math.min(bottom - window.innerHeight, maxScroll));
+        boundsCache.set(section, { top, bottom, end });
+      });
+    };
+
+    const getBounds = (section: HTMLElement) => {
+      const cached = boundsCache.get(section);
+      if (cached) return cached;
+      measureSections();
+      return boundsCache.get(section) ?? { top: 0, bottom: 0, end: 0 };
+    };
+
+    // 이미지 로딩으로 레이아웃 높이가 변할 때만 다시 측정한다.
+    const resizeObserver = new ResizeObserver(() => {
+      measureSections();
+    });
+    getSections().forEach((section) => resizeObserver.observe(section));
+    measureSections();
+
+    const getCurrentSectionIndex = () => {
+      const sections = getSections();
+      if (!sections.length) return 0;
+
+      const y = window.scrollY;
+      let index = 0;
+
+      // 현재 스크롤 위치보다 위에 있는 가장 마지막 섹터를 찾는다.
+      // 화면 중앙을 기준으로 찾지 않기 때문에 섹터 높이가 제각각이어도
+      // 중간에서 위로 올렸을 때 해당 섹터가 정확히 선택된다.
+      for (let i = 0; i < sections.length; i += 1) {
+        const { top } = getBounds(sections[i]);
+        if (top <= y + 2) index = i;
+        else break;
+      }
+
+      return Math.min(index, sections.length - 1);
+    };
+
+    const wait = (callback: () => void, ms: number) => {
+      window.clearTimeout(state.timer);
+      state.phase = 'waiting';
+      state.timer = window.setTimeout(() => {
+        state.timer = 0;
+        callback();
+      }, ms);
+    };
+
+    const moveTo = (getTarget: () => number, duration: number, done: () => void) => {
+      window.cancelAnimationFrame(state.animationFrame);
+      const startY = window.scrollY;
+      const startedAt = performance.now();
+      state.phase = 'scrolling';
+
+      const frame = (now: number) => {
+        if (!autoScroll || state.userInteracting) return;
+
+        const progress = Math.min(1, (now - startedAt) / duration);
+        // easeInOutCubic: 섹터 사이 이동이 갑자기 튀지 않도록 한다.
+        const eased = progress < 0.5
+          ? 4 * progress * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+        const target = Math.max(0, Math.min(getTarget(), getMaxScroll()));
+        const y = startY + (target - startY) * eased;
+
+        window.scrollTo(0, y);
+
+        if (progress < 1) {
+          state.animationFrame = window.requestAnimationFrame(frame);
+        } else {
+          window.scrollTo(0, target);
+          done();
+        }
+      };
+
+      state.animationFrame = window.requestAnimationFrame(frame);
+    };
+
+    const goToNextSection = () => {
+      const sections = getSections();
+      if (!autoScroll || state.userInteracting) return;
+
+      if (state.sectionIndex >= sections.length - 1) {
+        state.phase = 'idle';
+        return;
+      }
+
+      // 섹터 끝에서 정확히 2초 멈춘 뒤 다음 섹터로 이동한다.
+      wait(() => {
+        if (!autoScroll || state.userInteracting) return;
+
+        const nextIndex = state.sectionIndex + 1;
+        const nextSection = getSections()[nextIndex];
+        if (!nextSection) return;
+
+        state.sectionIndex = nextIndex;
+        moveTo(
+          () => getBounds(nextSection).top,
+          1300,
+          () => startSectionScroll(),
+        );
+      }, 2000);
+    };
+
+    const startSectionScroll = () => {
+      const sections = getSections();
+      const section = sections[state.sectionIndex];
+      if (!section || !autoScroll || state.userInteracting) return;
+
+      const bounds = getBounds(section);
+      const currentY = window.scrollY;
+
+      // 현재 섹터의 실제 화면 시작점부터 시작한다.
+      // 사용자가 중간에서 위로 올린 경우에는 그 위치에서 이어간다.
+      const startY = Math.max(bounds.top, Math.min(currentY, bounds.end));
+
+      // 섹터 전체가 현재 화면 안에 들어오는 경우.
+      // 내부 스크롤은 하지 않고 바로 섹터 끝에서 2초 대기 후 다음 섹터로 간다.
+      if (bounds.end - bounds.top <= 2) {
+        window.scrollTo(0, bounds.top);
+        goToNextSection();
+        return;
+      }
+
+      // 이미 섹터 끝에 도착한 경우에도 내부 스크롤을 다시 시작하지 않고
+      // 2초 후 다음 섹터로 넘어간다.
+      if (bounds.end - startY <= 2) {
+        window.scrollTo(0, bounds.end);
+        goToNextSection();
+        return;
+      }
+
+      window.cancelAnimationFrame(state.animationFrame);
+      state.phase = 'scrolling';
+
+      // 섹터 내부는 '시간'이 아니라 실제 이동 거리 기준의 일정한 속도로 이동한다.
+      // 화면/섹터 크기가 달라도 동일한 체감 속도를 유지한다.
+      const SPEED = 70; // px/sec
+      let lastTime = performance.now();
+
+      const frame = (now: number) => {
+        if (!autoScroll || state.userInteracting) return;
+
+        const dt = Math.min(64, now - lastTime) / 1000;
+        lastTime = now;
+
+        // 매 프레임 레이아웃을 다시 읽지 않는다. ResizeObserver가 높이 변경 때만
+        // boundsCache를 갱신하므로 이미지가 많은 섹터에서도 강제 reflow를 피한다.
+        const liveBounds = getBounds(section);
+        const current = window.scrollY;
+        const remaining = liveBounds.end - current;
+
+        if (remaining <= 2) {
+          window.scrollTo({ top: liveBounds.end, behavior: 'auto' });
+          goToNextSection();
+          return;
+        }
+
+        const nextY = Math.min(liveBounds.end, current + SPEED * dt);
+        window.scrollTo({ top: nextY, behavior: 'auto' });
+        state.animationFrame = window.requestAnimationFrame(frame);
+      };
+
+      state.animationFrame = window.requestAnimationFrame(frame);
+    };
+
+    // 사용자 입력이 들어오면 자동 스크롤의 RAF/대기 타이머를 즉시 끊는다.
+    // passive wheel 이벤트이므로 브라우저의 실제 수동 스크롤은 막지 않는다.
+    const stopForUserInteraction = () => {
+      if (!autoScroll) return;
+
+      state.userInteracting = true;
+      window.cancelAnimationFrame(state.animationFrame);
+      window.clearTimeout(state.timer);
+      window.clearTimeout(state.resumeTimer);
+      state.animationFrame = 0;
+      state.timer = 0;
+      state.phase = 'idle';
+
+      // 사용자가 계속 움직이는 동안에는 이 타이머를 계속 뒤로 미룬다.
+      state.resumeTimer = window.setTimeout(() => {
+        if (!autoScroll) return;
+
+        state.userInteracting = false;
+        state.resumeTimer = 0;
+        state.sectionIndex = getCurrentSectionIndex();
+        startSectionScroll();
+      }, 900);
+    };
+
+    // 자동 재생 시작 전에 페이지의 이미지를 가능한 한 미리 디코드한다.
+    // 스크롤 도중 이미지 디코딩이 몰리는 현상을 줄인다.
+    const images = Array.from(document.images);
+    images.forEach((img) => {
+      if (img.loading === 'lazy') img.loading = 'eager';
+    });
+    void Promise.all(images.map((img) => img.decode?.().catch(() => undefined))).then(() => {
+      if (autoScroll && !state.userInteracting && state.phase === 'idle') {
+        measureSections();
+        state.sectionIndex = getCurrentSectionIndex();
+        startSectionScroll();
+      }
+    });
+
+    state.sectionIndex = getCurrentSectionIndex();
+    state.userInteracting = false;
+    startSectionScroll();
+
+    window.addEventListener('wheel', stopForUserInteraction, { passive: true });
+    window.addEventListener('touchstart', stopForUserInteraction, { passive: true });
+    window.addEventListener('touchmove', stopForUserInteraction, { passive: true });
+    window.addEventListener('keydown', stopForUserInteraction);
+
+    return () => {
+      window.removeEventListener('wheel', stopForUserInteraction);
+      window.removeEventListener('touchstart', stopForUserInteraction);
+      window.removeEventListener('touchmove', stopForUserInteraction);
+      window.removeEventListener('keydown', stopForUserInteraction);
+      resizeObserver.disconnect();
+      boundsCache.clear();
+      html.style.scrollBehavior = previousScrollBehavior;
+      clearAutoScroll();
+    };
+  }, [autoScroll]);
 
   return (
     <main className={styles.page}>
+      <button
+        type="button"
+        className={`${styles.autoScrollButton} ${autoScroll ? styles.autoScrollButtonOn : ''}`}
+        onClick={() => setAutoScroll((value) => !value)}
+        aria-pressed={autoScroll}
+      >
+        AUTO SCROLL {autoScroll ? 'ON' : 'OFF'}
+      </button>
       <MusicButton />
 
-      <section className={`${styles.hero} ${styles.dark}`}>
+      <section ref={registerSection} className={`${styles.hero} ${styles.dark}`}>
         <div className={styles.grain} />
         <motion.div
           className={styles.heroInner}
@@ -61,7 +344,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.textSection}>
+      <section ref={registerSection} className={styles.textSection}>
         <motion.div {...fadeUp} className={styles.narrow}>
           <span className={styles.number}>01</span>
           <h2>
@@ -87,7 +370,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.statement}>
+      <section ref={registerSection} className={styles.statement}>
         <motion.p {...fadeUp}>
           어느새 나는
           <br />
@@ -97,7 +380,7 @@ function App() {
         </motion.p>
       </section>
 
-      <section className={styles.memories}>
+      <section ref={registerSection} className={styles.memories}>
         <div className={styles.sectionHead}>
           <span className={styles.number}>02</span>
           <p>OUR TIME</p>
@@ -137,7 +420,7 @@ function App() {
                   whileHover={{ y: -7 }}
                   whileTap={{ scale: 0.97 }}
                 >
-                  <img src={src} alt={`${memory.alt} ${imageIndex + 1}`} loading="lazy" decoding="async" />
+                  <img src={src} alt={`${memory.alt} ${imageIndex + 1}`} loading="eager" decoding="async" />
                   <span>0{imageIndex + 1}</span>
                 </motion.button>
               ))}
@@ -146,7 +429,7 @@ function App() {
         ))}
       </section>
 
-      <section className={styles.darkSection}>
+      <section ref={registerSection} className={styles.darkSection}>
         <motion.div {...fadeUp} className={styles.narrow}>
           <span className={styles.number}>03</span>
           <p className={styles.bigQuote}>
@@ -161,7 +444,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.textSection}>
+      <section ref={registerSection} className={styles.textSection}>
         <motion.div {...fadeUp} className={styles.narrow}>
           <span className={styles.number}>04</span>
           <h2>
@@ -195,7 +478,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.gratitude}>
+      <section ref={registerSection} className={styles.gratitude}>
         <motion.div {...fadeUp}>
           <span className={styles.number}>05</span>
           <h2>고마워.</h2>
@@ -211,7 +494,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.future}>
+      <section ref={registerSection} className={styles.future}>
         <div className={styles.sectionHead}>
           <span className={styles.number}>06</span>
           <p>FROM NOW ON</p>
@@ -239,7 +522,7 @@ function App() {
         </div>
       </section>
 
-      <section className={styles.blankFrames}>
+      <section ref={registerSection} className={styles.blankFrames}>
         <motion.div {...fadeUp}>
           <span className={styles.number}>07</span>
           <p className={styles.framesLead}>
@@ -261,7 +544,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.finalWords}>
+      <section ref={registerSection} className={styles.finalWords}>
         <motion.div {...fadeUp}>
           <span className={styles.number}>08</span>
           <p>
@@ -292,7 +575,7 @@ function App() {
         </motion.div>
       </section>
 
-      <section className={styles.proposal}>
+      <section ref={registerSection} className={styles.proposal}>
         <div className={styles.proposalGlow} />
         <AnimatePresence mode="wait">
           {!answered ? (
