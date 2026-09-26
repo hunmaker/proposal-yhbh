@@ -556,47 +556,10 @@ h2 em,
 }
 
 .answer .heart {
-  position: relative;
-  z-index: 2;
   margin-bottom: 40px;
   color: #d5a88e;
   font-size: 110px;
   line-height: 1;
-  text-shadow: 0 0 45px rgba(213, 168, 142, 0.22);
-}
-
-.heartBurst {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 0;
-  width: 1px;
-  height: 1px;
-  pointer-events: none;
-}
-
-.burstHeart {
-  position: absolute;
-  top: 0;
-  left: 0;
-  color: #d8a18b;
-  font-size: 22px;
-  line-height: 1;
-  filter: drop-shadow(0 0 12px rgba(216, 161, 139, 0.3));
-}
-
-.heartHalo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: 1;
-  width: 150px;
-  height: 150px;
-  border: 1px solid rgba(224, 188, 166, 0.38);
-  border-radius: 50%;
-  box-shadow: 0 0 45px rgba(224, 188, 166, 0.12);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
 }
 
 .answer h2 {
