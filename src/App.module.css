@@ -488,11 +488,10 @@ h2 em,
 }
 
 .proposal {
-  height: 100svh;
+  min-height: 100svh;
   display: grid;
   place-items: center;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   background: radial-gradient(circle at 50% 45%, #38251f, #150f0d 45%, #090807);
 }
 
