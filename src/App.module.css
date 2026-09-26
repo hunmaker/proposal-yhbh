@@ -595,7 +595,7 @@ h2 em,
 
 .lightbox {
   position: fixed;
-  z-index: 100;
+  z-index: 200;
   inset: 0;
   display: grid;
   place-items: center;
